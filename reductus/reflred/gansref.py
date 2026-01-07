@@ -1,6 +1,3 @@
-import copy
-import datetime
-import os
 import numpy as np
 import traceback
 
@@ -215,11 +212,21 @@ class GANSRefl(ReflData):
         self.monitor.deadtime_error = 0.0
 
         self.monitor.time_step = 0.001  # assume 1 ms accuracy on reported clock
+        
         # Monitor
-        self.monitor.counts = entry_field(entry, header, 'Monitor')
+        fields = entry["data fields"]
+        mon_fields = [f for f in fields if f.startswith("Monitor")]
+        sec_fields = [f for f in fields if f.startswith("Seconds")]
+        det_fields = [f for f in fields if f.startswith("Detector")]
+
+        mon_field = mon_fields[0]
+        sec_field = sec_fields[0]
+        det_field = det_fields[0]
+
+        self.monitor.counts = entry_field(entry, header, mon_field)
         self.monitor.counts_variance = self.monitor.counts.copy()
-        self.monitor.count_time = entry_field(entry, header, 'Seconds')
-        self.monitor.roi_counts = entry_field(entry, header, 'Detector')
+        self.monitor.count_time = entry_field(entry, header, sec_field)
+        self.monitor.roi_counts = entry_field(entry, header, det_field)
         self.monitor.roi_variance = self.monitor.roi_counts.copy()
 
         # Needed?
@@ -292,7 +299,8 @@ class GANSRefl(ReflData):
         self.detector.rotation = 0.0
 
         # Counts
-        self.detector.counts = entry_field(entry, header, 'Detector')
+        det_field = [f for f in entry["data fields"] if f.startswith("Detector")][0]
+        self.detector.counts = entry_field(entry, header, det_field)
         self.detector.counts_variance = self.detector.counts.copy()
         self.detector.dims = self.detector.counts.shape[1:]
 
