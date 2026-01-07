@@ -21,8 +21,8 @@ async function loadPyodideAndPackages() {
   const api = await pyodide.runPythonAsync(`
   import micropip
   import msgpack
-  await micropip.install("./reductus-0.9.0-py3-none-any.whl")
-  from web_gui import api
+  await micropip.install("./reductus-1.0.1-py3-none-any.whl")
+  from reductus.web_gui import api
 
   config = {
     "cache": None,
