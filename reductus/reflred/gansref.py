@@ -1,3 +1,6 @@
+import copy
+import datetime
+import os
 import numpy as np
 import traceback
 
@@ -126,7 +129,7 @@ def _parse_section(section: str) -> dict:
 
     return res
 
-def load_entries(filename, file_obj=None, entries=None):
+def load_entries(filename, file_obj=None, entries=None, polarization_state='00'):
     """
     Load the entries from a GANS Spec data file.
     """
@@ -146,7 +149,10 @@ def load_entries(filename, file_obj=None, entries=None):
     parsed_header = _parse_header(header)
     parsed_sections = [_parse_section(section) for section in sections if section[:2] == '#S']
     parsed_sections = [section for section in parsed_sections if section['actual_number_points'] > 0]
-    ret_entries = [GANSRefl(section, parsed_header, filename) for section in parsed_sections]
+    ret_entries = [
+        GANSRefl(section, parsed_header, filename, polarization_state)
+        for section in parsed_sections
+    ]   
 
     if entries is not None:
         ret_entries = [entry for entry in ret_entries if entry.entry in entries]
@@ -188,10 +194,12 @@ def _convert_slitrotation_to_aperture(rot: float, rot_zero: float = 0.0) -> floa
 
 class GANSRefl(ReflData):
 
-    def __init__(self, entry, header, filename):
+    def __init__(self, entry, header, filename, polarization_state='00'):
         super(GANSRefl, self).__init__()
+        self._polarization_state = polarization_state
         self._set_metadata(entry, header, filename)
         self.load(entry, header)
+
 
     def _set_metadata(self, entry, header, filename):
         self.entry = '%s_%d' % (header['name'], entry['scan_number'])
@@ -212,22 +220,6 @@ class GANSRefl(ReflData):
         self.monitor.deadtime_error = 0.0
 
         self.monitor.time_step = 0.001  # assume 1 ms accuracy on reported clock
-        
-        # Monitor
-        fields = entry["data fields"]
-        mon_fields = [f for f in fields if f.startswith("Monitor")]
-        sec_fields = [f for f in fields if f.startswith("Seconds")]
-        det_fields = [f for f in fields if f.startswith("Detector")]
-
-        mon_field = mon_fields[0]
-        sec_field = sec_fields[0]
-        det_field = det_fields[0]
-
-        self.monitor.counts = entry_field(entry, header, mon_field)
-        self.monitor.counts_variance = self.monitor.counts.copy()
-        self.monitor.count_time = entry_field(entry, header, sec_field)
-        self.monitor.roi_counts = entry_field(entry, header, det_field)
-        self.monitor.roi_variance = self.monitor.roi_counts.copy()
 
         # Needed?
         self.sample.name = header['name']
@@ -261,6 +253,7 @@ class GANSRefl(ReflData):
                     self.intent = 'background-'
             else:
                 self.intent = 'rock detector'
+
         elif theta is not None:
             self.intent = 'rock sample'
         elif slit1 is not None:
@@ -270,7 +263,36 @@ class GANSRefl(ReflData):
         else:
             self.intent = 'scan'
 
-        # TODO: Polarizers
+        # Polarization
+        data_fields = entry['data fields']
+        is_polarized = any(f.startswith('Det_') for f in data_fields)
+
+        if is_polarized:
+            state = self._polarization_state
+
+            det_field = f'Det_{state}'
+            mon_field = f'Mon_{state}'
+            sec_field = f'Sec_{state}'
+
+            if det_field not in data_fields:
+                raise ValueError(f"Polarization state {state} not found in file")
+                
+
+            self.detector.counts = entry_field(entry, header, det_field)
+            self.detector.counts_variance = self.detector.counts.copy()
+
+            self.monitor.counts = entry_field(entry, header, mon_field)
+            self.monitor.counts_variance = self.monitor.counts.copy()
+            self.monitor.count_time = entry_field(entry, header, sec_field)
+
+        else:
+            # Unpolarized (legacy)
+            self.detector.counts = entry_field(entry, header, 'Detector')
+            self.detector.counts_variance = self.detector.counts.copy()
+            self.monitor.counts = entry_field(entry, header, 'Monitor')
+            self.monitor.counts_variance = self.monitor.counts.copy()
+            self.monitor.count_time = entry_field(entry, header, 'Seconds')
+
 
         # Monochromator
         self.monochromator.wavelength = WAVELENGTH
@@ -298,10 +320,9 @@ class GANSRefl(ReflData):
         self.detector.distance = 1000.0
         self.detector.rotation = 0.0
 
-        # Counts
-        det_field = [f for f in entry["data fields"] if f.startswith("Detector")][0]
-        self.detector.counts = entry_field(entry, header, det_field)
-        self.detector.counts_variance = self.detector.counts.copy()
+        # Monitor
+        self.monitor.roi_counts = self.detector.counts
+        self.monitor.roi_variance = self.detector.counts_variance
         self.detector.dims = self.detector.counts.shape[1:]
 
         # Angles
