@@ -11,6 +11,7 @@ from reductus.reflred.gansref import _convert_slitrotation_to_aperture
 def load(filelist=None,
         intent='auto',
         Qz_basis='detector',
+        polarization_state='00',
         sample_width=None,
         slit1_distance=None,
         slit1_aperture=None,
@@ -50,6 +51,10 @@ def load(filelist=None,
 
     Qz_basis (opt:detector|sample|actual)
     : How to calculate Qz from instrument angles.
+
+    polarization_state (opt:00|01|10|11)
+    : Select polarization channel to load.
+    Use '00' for unpolarized state.
 
     sample_width {Sample width (mm)} (float?)
     : Width of the sample along the beam direction in mm, used for
@@ -91,7 +96,7 @@ def load(filelist=None,
     slit3_rotary {slit3 rotary?} (bool)
     : designates slit 3 as a rotary slit and converts its value from
     slit rotation to a slit aperture in mm
-
+    
     slit4_distance {override slit4 distance} (float?)
     : if specified, will override the value found in the file for
     the distance from the sample to slit 4
@@ -118,7 +123,15 @@ def load(filelist=None,
     enforce_specular = True
 
     datasets = []
-    for data in url_load_list(filelist, loader=gansref.load_entries):
+    for data in url_load_list(
+                filelist,
+                loader=lambda *args, **kwargs:
+                    gansref.load_entries(
+                        *args,
+                        polarization_state=polarization_state,
+                        **kwargs
+                    )
+        ):
         data.Qz_basis = Qz_basis
         if intent not in [None, 'auto']:
             data.intent = intent
@@ -134,7 +147,6 @@ def load(filelist=None,
                 data.Qz_target = 4 * np.pi / data.monochromator.wavelength * np.sin(np.radians(data.sample.angle_x_target))
             else:
                 data.Qz_target = data.Qz
-      
         if slit1_distance is not None:
             data.slit1.distance = slit1_distance
         if slit1_aperture is not None:
