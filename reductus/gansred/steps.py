@@ -5,7 +5,7 @@ from reductus.reflred.steps import subtract_background, divide_intensity, rescal
 
 from reductus.dataflow.automod import module
 from reductus.reflred.gansref import _convert_slitrotation_to_aperture
-
+from reductus.reflred.refldata import ReflData
 
 @module
 def load(filelist=None,
@@ -260,3 +260,150 @@ def fit_slit_alignment(slit_align, m0=None, x00=None):
     bff, slit_align2 = fit_line_xintercept(slit_align, m0, x00)
 
     return bff, slit_align2
+
+@module
+def stream_load(theta=None, two_theta=None, detector=None, monitor=None,
+                count_time=None,
+                s1=None, s2=None, s3=None, s4=None,
+                wavelength=2.35, intent="specular"):
+    r"""
+    Load streaming reflectivity data from arrays.
+
+    **Inputs**
+
+    theta (float[])
+    : Sample angle values.
+
+    two_theta (float[])
+    : Detector angle values.
+
+    detector (float[])
+    : Detector counts.
+
+    monitor (float[])
+    : Monitor counts.
+
+    count_time (float[])
+    : Count time in seconds per point.
+
+    s1 (float[])
+    : Slit 1 aperture values (rotary, degrees).
+
+    s2 (float[])
+    : Slit 2 aperture values (rotary, degrees).
+
+    s3 (float[])
+    : Slit 3 aperture values (mm).
+
+    s4 (float[])
+    : Slit 4 aperture values (rotary, degrees).
+
+    wavelength {Neutron wavelength (Ang)} (float)
+    : Incident wavelength.
+
+    intent (opt:auto|specular|background+|background-|intensity|rock sample|rock detector|rock chi|scan)
+    : Measurement intent.
+
+    **Returns**
+
+    output (refldata[])
+    : ReflData dataset constructed from streaming inputs.
+    """
+    from reductus.reflred.resolution import FWHM2sigma
+
+    WAVELENGTH_DISPERSION = 0.02
+
+    def to_array(x, n):
+        """Convert x to a 1-D float array of length n, or ones if x is None."""
+        if x is None:
+            return np.ones(n)
+        a = np.asarray(x, dtype=float)
+        return a[None] if a.ndim == 0 else a
+
+    # --- Normalise all inputs to 1-D arrays ---
+    detector   = to_array(detector, 1)
+    n          = len(detector)
+    monitor    = to_array(monitor,    n)
+    count_time = to_array(count_time, n)
+    theta      = to_array(theta,      n)
+    two_theta  = to_array(two_theta,  n)
+    s1         = to_array(s1,         n)
+    s2         = to_array(s2,         n)
+    s3         = to_array(s3,         n)
+    s4         = to_array(s4,         n)
+
+    # --- Wavelength resolution (FWHM → 1-sigma) ---
+    wl_res = FWHM2sigma(WAVELENGTH_DISPERSION * wavelength)
+
+    # --- Build ReflData ---
+    data        = ReflData()
+    data.points = n
+
+    # Detector
+    data.detector.counts              = detector
+    data.detector.counts_variance     = np.maximum(detector, 1)
+    data.detector.distance            = 1000.0
+    data.detector.deadtime            = np.array([0.0])
+    data.detector.deadtime_error      = np.array([0.0])
+    data.detector.wavelength          = np.full(n, wavelength)
+    data.detector.wavelength_resolution = np.full(n, wl_res)
+
+    # Monitor
+    data.monitor.counts          = monitor
+    data.monitor.counts_variance = np.maximum(monitor, 1)
+    data.monitor.count_time      = count_time
+    data.monitor.time_step       = 0.001   # 1 ms clock accuracy
+
+    # Monochromator
+    data.monochromator.wavelength            = wavelength
+    data.monochromator.wavelength_resolution = wl_res
+
+    # Angles
+    data.sample.angle_x          = theta
+    data.sample.angle_x_target   = theta.copy()
+    data.detector.angle_x        = two_theta
+    data.detector.angle_x_target = two_theta.copy()
+
+    # Slits — GANS geometry
+    data.slit1.distance = -1911.0
+    data.slit2.distance = -200.0
+    data.slit3.distance = 282.0
+    data.slit4.distance = 921.0
+
+    data.slit1.x        = _convert_slitrotation_to_aperture(s1)
+    data.slit1.x_target = copy.copy(data.slit1.x)
+    data.slit1.y        = 50.0
+    data.slit1.y_target = 50.0
+
+    data.slit2.x        = _convert_slitrotation_to_aperture(s2)
+    data.slit2.x_target = copy.copy(data.slit2.x)
+    data.slit2.y        = 50.0
+    data.slit2.y_target = 50.0
+
+    data.slit3.x        = s3
+    data.slit3.x_target = s3.copy()
+    data.slit3.y        = 50.0
+    data.slit3.y_target = 50.0
+
+    data.slit4.x        = _convert_slitrotation_to_aperture(s4)
+    data.slit4.x_target = copy.copy(data.slit4.x)
+    data.slit4.y        = 50.0
+    data.slit4.y_target = 50.0
+
+    # Intent and Qz basis
+    data.intent   = intent
+    data.Qz_basis = "detector"
+
+    # For background scans set Qz_target from detector angle
+    # (mirrors the logic in load() and gansref.py)
+    if intent.startswith("background"):
+        data.Qz_target = (
+            4 * np.pi / wavelength
+            * np.sin(np.radians(two_theta / 2.0))
+        )
+
+    # Resolution and normalization
+    data = divergence(data, None)
+    data = normalize(data, base="time")
+
+    return [data]
