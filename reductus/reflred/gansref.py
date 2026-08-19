@@ -15,7 +15,8 @@ WAVELENGTH_DISPERSION = 0.02
 
 UNIT_MAP = {'slit1': 'mm',
             'slit2': 'mm',
-            'Slit3': 'mm',
+            'slit3': 'mm',
+            'slit4': 'mm',
             '2Theta': 'deg',
             'Theta': 'deg'}
 
