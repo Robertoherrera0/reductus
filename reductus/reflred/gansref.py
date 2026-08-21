@@ -15,7 +15,8 @@ WAVELENGTH_DISPERSION = 0.02
 
 UNIT_MAP = {'slit1': 'mm',
             'slit2': 'mm',
-            'Slit3': 'mm',
+            'slit3': 'mm',
+            'slit4': 'mm',
             '2Theta': 'deg',
             'Theta': 'deg'}
 
@@ -303,14 +304,14 @@ class GANSRefl(ReflData):
         self.slit2.distance = -200
         self.slit3.distance = 282
         self.slit4.distance = 921
-        for lbl, slit in zip(['slit1', 'slit2', 'Slit3'], [self.slit1, self.slit2, self.slit4]):
+        for lbl, slit in zip(['slit1', 'slit2', 'slit3', 'slit4'], [self.slit1, self.slit2, self.slit3, self.slit4]):
             slit.x = entry_field(entry, header, lbl)
             slit.x_target = copy.copy(slit.x)
             slit.y = 50
             slit.y_target = 50
 
-        self.slit3.x = 12.7 * np.ones(entry['actual_number_points'])
-        self.slit3.x_target = copy.copy(self.slit3.x)
+        # self.slit3.x = 12.7 * np.ones(entry['actual_number_points'])
+        # self.slit3.x_target = copy.copy(self.slit3.x)
 
         # Detector
         self.detector.wavelength = self.monochromator.wavelength
