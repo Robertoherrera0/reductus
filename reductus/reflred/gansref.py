@@ -230,7 +230,7 @@ class GANSRefl(ReflData):
         self.scan_units = []
         self.scan_label = []
         
-        scanned_variables = entry['data fields'][:entry['data fields'].index('H')]
+        scanned_variables = entry['data fields'][:entry['data fields'].index('Epoch')]
         for var in scanned_variables:
             self.scan_value.append(entry_field(entry, header, var))
             self.scan_units.append(UNIT_MAP.get(var, None))
