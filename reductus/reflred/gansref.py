@@ -59,7 +59,8 @@ def _parse_header(header: str) -> dict:
     for line in header.splitlines():
         line = line.rstrip()
         if len(line):
-            code, data = line.split('#')[1].split(' ', 1)
+            parts = line.split('#', 1)[1].split(' ', 1)
+            code, data = parts[0], (parts[1] if len(parts) > 1 else '')
             match code[0]:
                 case 'F':
                     res.update({'name': data})
@@ -92,7 +93,8 @@ def _parse_section(section: str) -> dict:
         
         # header information
         if '#' in line:
-            code, data = line.split('#')[1].split(' ', 1)
+            parts = line.split('#', 1)[1].split(' ', 1)
+            code, data = parts[0], (parts[1] if len(parts) > 1 else '')
             match code[0]:
                 case 'S':
                     sdata = data.split()
